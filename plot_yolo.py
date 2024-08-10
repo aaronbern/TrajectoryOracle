@@ -30,6 +30,7 @@ class PlotYolo:
         self.frames_processed = 0
         self.__frame_size = None
         self.distance_threshold = distance_threshold
+        self.colors_generated = 0
         self.used_colors = {}
         self.set_frame_size()
         pass
@@ -79,26 +80,27 @@ class PlotYolo:
         return frame, results
 
     def gen_unique_color(self):
-        # Rengerate a random number 100-250 must be int
-        red = np.random.randint(20, 255)
-        green = np.random.randint(20, 255)
-        blue = np.random.randint(20, 255)
+        # Generate a unique color for the object
+        # This is used to draw the trajectory of the object
+        rgb = []
 
-        # If all of them aren't 255, make one randomly 255
-        if red != 255 and green != 255 and blue != 255:
-            rand = np.random.randint(0, 3)
-            if rand == 0:
-                red = 255
-            elif rand == 1:
-                green = 255
-            else:
-                blue = 255
+        for i in range(3):
+            random = np.random.randint(0, 25)
+            random *= 10
+            rgb.append(random)
 
-        if (red, green, blue) in self.used_colors:
+        if tuple(rgb) in self.used_colors:
             return self.gen_unique_color()
+        else:
+            self.used_colors[tuple(rgb)] = True
 
-        self.used_colors[(red, green, blue)] = True
-        return tuple([red, green, blue])
+        self.colors_generated += 1
+
+        if self.colors_generated > 1000:
+            self.used_colors = {}
+            self.colors_generated
+
+        return tuple(rgb)
 
     def yield_next_frame_raw(self):
         # Yield the next frame and the results of the YOLO detection
@@ -164,7 +166,6 @@ class PlotYolo:
 
                     object_id += 1
 
-        
         # Move last frames objects to a holding list
         self.objects_last_frame = self.objects
 
