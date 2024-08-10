@@ -16,13 +16,12 @@ import threading
 import time
 
 import cv2
-import matplotlib.pyplot as plt
 import numpy as np
 from ultralytics import YOLO
 
 
 class PlotYolo:
-    def __init__(self, video_filepath, distance_threshold=50, visual_output=False):
+    def __init__(self, video_filepath, distance_threshold=50):
         self.yolo = YOLO("yolov8s.pt")
         self.video_filepath = video_filepath
         self.video_capture = cv2.VideoCapture(self.video_filepath)
@@ -31,23 +30,37 @@ class PlotYolo:
         self.frames_processed = 0
         self.__frame_size = None
         self.distance_threshold = distance_threshold
+        self.used_colors = {}
         self.set_frame_size()
         pass
 
     def __del__(self):
+        # Zero out all data, and release the video capture,
+        # and close all windows
+        self.video_filepath = None
+        self.objects_last_frame = None
+        self.objects = None
+        self.frames_processed = 0
+        self.__frame_size = None
+        self.distance_threshold = None
         self.video_capture.release()
+        # Nothing should open a window, but if it ends up being altered to
+        # create a window this is a safety measure.
         cv2.destroyAllWindows()
         pass
 
     @property
     def object_count(self):
+        # Return the number of objects detected in the current frame
         return len(self.objects)
 
     @property
     def frame_size(self):
+        # Return the size of the frame
         return self.__frame_size
 
     def set_frame_size(self):
+        # Get the frame size of the video
         if self.__frame_size is None:
             ret, frame = self.video_capture.read()
             self.__frame_size = frame.shape[:2]
@@ -55,6 +68,9 @@ class PlotYolo:
         return
 
     def get_next_frame_raw(self):
+        # Return the next frame and the results of the YOLO detection
+        # This is a raw version of the function, and should not be used
+        # outside of the class.
         try:
             frame, results = next(self.yield_next_frame_raw())
         except StopIteration:
@@ -62,25 +78,32 @@ class PlotYolo:
 
         return frame, results
 
-    def get_colors(self, cls_num):
-        base_colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255)]
-        color_index = cls_num % len(base_colors)
-        increments = [(1, -2, 1), (-2, 1, -1), (1, -1, 2)]
-        color = [
-            base_colors[color_index][i]
-            + increments[color_index][i] * (cls_num // len(base_colors)) % 256
-            for i in range(3)
-        ]
-        return tuple(color)
-
-    def gen_random_color(self):
+    def gen_unique_color(self):
         # Rengerate a random number 100-250 must be int
-        red = np.random.randint(100, 250)
-        green = np.random.randint(100, 250)
-        blue = np.random.randint(100, 250)
+        red = np.random.randint(20, 255)
+        green = np.random.randint(20, 255)
+        blue = np.random.randint(20, 255)
+
+        # If all of them aren't 255, make one randomly 255
+        if red != 255 and green != 255 and blue != 255:
+            rand = np.random.randint(0, 3)
+            if rand == 0:
+                red = 255
+            elif rand == 1:
+                green = 255
+            else:
+                blue = 255
+
+        if (red, green, blue) in self.used_colors:
+            return self.gen_unique_color()
+
+        self.used_colors[(red, green, blue)] = True
         return tuple([red, green, blue])
 
     def yield_next_frame_raw(self):
+        # Yield the next frame and the results of the YOLO detection
+        # This is a raw version of the function, and should not be used
+        # outside of the class.
         while True:
             ret, frame = self.video_capture.read()
             self.frames_processed += 1
@@ -90,11 +113,18 @@ class PlotYolo:
             yield frame, results
 
     def save_frame(self, frame):
+        # Save the frame to the test_output folder
+        # This was used for debugging purposes
         cv2.imwrite(f"./test_output/frame_{self.frames_processed}.jpg", frame)
         return
 
     def get_next_frame(self, confidence=0.6):
+        # Get the next frame and the detected objects
+        # This function will return the detected objects in the frame
+        # that have a confidence greater than the threshold.
+        # The threshold is set to 0.6 by default.
         try:
+            # Get the raw data, and unpack it
             frame, results = self.get_next_frame_raw()
         except TypeError:
             return None
@@ -105,6 +135,9 @@ class PlotYolo:
         for result in results:
             classes_names = result.names
 
+            # Loop through the detected objects
+            # If the confidence is greater than the threshold, add it to the list
+            # of objects found this frame
             for box in result.boxes:
                 if box.conf[0] > confidence:
                     [x1, y1, x2, y2] = box.xyxy[0]
@@ -131,12 +164,25 @@ class PlotYolo:
 
                     object_id += 1
 
+        
+        # Move last frames objects to a holding list
         self.objects_last_frame = self.objects
+
+        # Set the current objects to the new objects
         self.objects = objects
+
+        # Correlate the objects between the last frame and the current frame
+        # This will assign an ID to the object if it is the same object
+        # from the last frame.
         self.correlate_objects()
+
+        # Return all the objects detected this frame, and their ID's
         return self.objects
 
     def correlate_objects(self):
+        # Correlate the objects between the last frame and the current frame
+        # This will assign an ID to the object if it is the same object
+        # from the last frame.
         for obj in self.objects:
             closest_match = 100000000
             for obj_last in self.objects_last_frame:
@@ -159,8 +205,11 @@ class PlotYolo:
         return
 
     def spinning_bar(self, stop_event):
+        # This is used to show a spinning bar while the video is being processed.
+        # This was developed on a computer with a slower processor, and might
+        # not be needed on a better machine, that's why plot_video has a
+        # spinner=False parameter.
         spinner = ["|", "/", "-", "\\"]
-        start_time = time.time()
         idx = 0
 
         while not stop_event.is_set():
@@ -191,7 +240,7 @@ class PlotYolo:
 
             for obj in objects:
                 if obj.id not in colors:
-                    colors[obj.id] = self.gen_random_color()
+                    colors[obj.id] = self.gen_unique_color()
 
                 # Draw a circle at the current position
                 cv2.circle(
@@ -202,14 +251,15 @@ class PlotYolo:
                     -1,
                 )
 
-
                 if obj.last_position is not None:
                     continue
 
         # Save the frame
         video_filename = self.video_filepath.split("/")[-1]
         video_filename = video_filename.split(".")[0]
-        cv2.imwrite(f"./test_output/{video_filename}_trajectory.jpg", frame)
+        cv2.imwrite(
+            f"./test_output/{video_filename}_dt_{self.distance_threshold}.jpg", frame
+        )
 
         if spinner:
             stop_event.set()
@@ -218,6 +268,9 @@ class PlotYolo:
 
 
 class DetectedObject:
+    # This class is used to store the detected objects
+    # This will what the Reinforcement Learning agent will use
+    # to track the object.
     def __init__(self, id, class_name, class_id, confidence, x1, y1, x2, y2):
         self.id = id
         self.class_name = class_name

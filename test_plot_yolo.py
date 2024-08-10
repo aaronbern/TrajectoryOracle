@@ -8,27 +8,22 @@
 #
 ###############################################################################
 
-from plot_yolo import DetectedObject, PlotYolo
+from plot_yolo import PlotYolo
+import sys
 
 
-def main():
-    one_walking = "./test_videos/one_man_walking.mp4"
-    many_walking = "./test_videos/many_walking.mp4"
-    video_filepath = many_walking
-    #video_filepath = one_walking
-    plot_yolo = PlotYolo(video_filepath)
+def main(argv):
+    video_filepath = argv[0]
+
+    if len(argv) > 1:
+        distance_threshold = int(argv[1])
+    else:
+        distance_threshold = 50
+
+    plot_yolo = PlotYolo(video_filepath, distance_threshold)
     plot_yolo.plot_video(spinner=True)
-    # print(f"Frame size: {plot_yolo.frame_size}")
-    # while True:
-    #   frame = plot_yolo.get_next_frame()
-    #   if frame is None:
-    #       exit(0)
-    #
-    #   for obj in plot_yolo.objects:
-    #       print(f"{obj}")
-
     return
 
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv[1:])
