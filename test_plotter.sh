@@ -10,3 +10,7 @@ for dt in ${dts[@]}; do
         python test_plot_yolo.py $video_dir/$video $dt
     done
 done
+
+
+
+
